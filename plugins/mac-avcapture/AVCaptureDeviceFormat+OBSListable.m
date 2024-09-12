@@ -51,6 +51,43 @@
     return objc_getAssociatedObject(self, @selector(obsPropertyListDescription));
 }
 
+- (NSString *)obsPropertyListInternalRepresentation
+{
+    if (!objc_getAssociatedObject(self, @selector(obsPropertyListInternalRepresentation))) {
+        CMVideoDimensions formatDimensions = CMVideoFormatDescriptionGetDimensions(self.formatDescription);
+        FourCharCode formatSubType = CMFormatDescriptionGetMediaSubType(self.formatDescription);
+        OBSAVCaptureColorSpace deviceColorSpace = [OBSAVCapture colorspaceFromDescription:self.formatDescription];
+        NSString *frameRatesInternalDescription = @"";
+        NSArray *sortedRanges = [self.videoSupportedFrameRateRanges
+            sortedArrayUsingComparator:^NSComparisonResult(AVFrameRateRange *_Nonnull lhs,
+                                                           AVFrameRateRange *_Nonnull rhs) {
+                if (lhs.maxFrameRate > rhs.maxFrameRate) {
+                    return NSOrderedDescending;
+                } else if (lhs.maxFrameRate < rhs.maxFrameRate) {
+                    return NSOrderedAscending;
+                }
+                if (lhs.minFrameRate > rhs.minFrameRate) {
+                    return NSOrderedDescending;
+                } else if (lhs.minFrameRate < rhs.minFrameRate) {
+                    return NSOrderedAscending;
+                }
+                return NSOrderedSame;
+            }];
+        for (AVFrameRateRange *range in sortedRanges) {
+            frameRatesInternalDescription = [frameRatesInternalDescription
+                stringByAppendingFormat:@"%.3f-%.3f", range.minFrameRate, range.maxFrameRate];
+        }
+        NSString *internalRepresentation =
+            [NSString stringWithFormat:@"%dx%d %@ %i %i", formatDimensions.width, formatDimensions.height,
+                                       frameRatesInternalDescription, deviceColorSpace, formatSubType];
+        NSData *internalRepresentationBytes = [internalRepresentation dataUsingEncoding:NSUTF8StringEncoding];
+        NSString *base64String = [internalRepresentationBytes base64EncodedStringWithOptions:0];
+        objc_setAssociatedObject(self, @selector(obsPropertyListInternalRepresentation), base64String,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return objc_getAssociatedObject(self, @selector(obsPropertyListInternalRepresentation));
+}
+
 - (NSNumber *)bitsPerPixel
 {
     if (!objc_getAssociatedObject(self, @selector(bitsPerPixel))) {
