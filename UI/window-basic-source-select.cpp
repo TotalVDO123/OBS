@@ -58,8 +58,7 @@ bool OBSBasicSourceSelect::EnumGroups(void *data, obs_source_t *source)
 	const char *id = obs_source_get_unversioned_id(source);
 
 	if (strcmp(id, window->id) == 0) {
-		OBSBasic *main =
-			reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
+		OBSBasic *main = OBSBasic::Get();
 		OBSScene scene = main->GetCurrentScene();
 
 		obs_sceneitem_t *existing = obs_scene_get_group(scene, name);
@@ -164,7 +163,7 @@ static void AddExisting(OBSSource source, bool visible, bool duplicate,
 			obs_blending_method *blend_method,
 			obs_blending_type *blend_mode)
 {
-	OBSBasic *main = reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
+	OBSBasic *main = OBSBasic::Get();
 	OBSScene scene = main->GetCurrentScene();
 	if (!scene)
 		return;
@@ -210,7 +209,7 @@ bool AddNew(QWidget *parent, const char *id, const char *name,
 	    const bool visible, OBSSource &newSource,
 	    OBSSceneItem &newSceneItem)
 {
-	OBSBasic *main = reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
+	OBSBasic *main = OBSBasic::Get();
 	OBSScene scene = main->GetCurrentScene();
 	bool success = false;
 	if (!scene)
@@ -266,8 +265,7 @@ void OBSBasicSourceSelect::on_buttonBox_accepted()
 		AddExisting(QT_TO_UTF8(source_name), visible, false, nullptr,
 			    nullptr, nullptr, nullptr);
 
-		OBSBasic *main =
-			reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
+		OBSBasic *main = OBSBasic::Get();
 		const char *scene_name =
 			obs_source_get_name(main->GetCurrentSceneSource());
 
@@ -433,8 +431,7 @@ OBSBasicSourceSelect::OBSBasicSourceSelect(OBSBasic *parent, const char *id_,
 	});
 
 	if (strcmp(id_, "scene") == 0) {
-		OBSBasic *main =
-			reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
+		OBSBasic *main = OBSBasic::Get();
 		OBSSource curSceneSource = main->GetCurrentSceneSource();
 
 		ui->selectExisting->setChecked(true);
