@@ -2566,6 +2566,8 @@ void OBSBasic::UpdateMultiviewProjectorMenu()
 {
 	ui->multiviewProjectorMenu->clear();
 	AddProjectorMenuMonitors(ui->multiviewProjectorMenu, this, &OBSBasic::OpenMultiviewProjector);
+	ui->multiviewProjectorMenu->addSeparator();
+	ui->multiviewProjectorMenu->addAction(QTStr("Projector.Window"), this, &OBSBasic::OpenMultiviewWindow);
 }
 
 void OBSBasic::InitHotkeys()
@@ -5181,13 +5183,14 @@ void OBSBasic::on_scenes_customContextMenuRequested(const QPoint &pos)
 		popup.addSeparator();
 
 		delete sceneProjectorMenu;
-		sceneProjectorMenu = new QMenu(QTStr("SceneProjector"));
+		sceneProjectorMenu = new QMenu(QTStr("Projector.Open.Scene"));
 		AddProjectorMenuMonitors(sceneProjectorMenu, this, &OBSBasic::OpenSceneProjector);
+		sceneProjectorMenu->addSeparator();
+		sceneProjectorMenu->addAction(QTStr("Projector.Window"), this, &OBSBasic::OpenSceneWindow);
+
 		popup.addMenu(sceneProjectorMenu);
 
-		QAction *sceneWindow = popup.addAction(QTStr("SceneWindow"), this, &OBSBasic::OpenSceneWindow);
-
-		popup.addAction(sceneWindow);
+		popup.addSeparator();
 		popup.addAction(QTStr("Screenshot.Scene"), this, &OBSBasic::ScreenshotScene);
 		popup.addSeparator();
 		popup.addAction(QTStr("Filters"), this, &OBSBasic::OpenSceneFilters);
@@ -5577,6 +5580,32 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 	delete colorSelect;
 	delete deinterlaceMenu;
 
+	OBSSceneItem sceneItem;
+	obs_source_t *source;
+	uint32_t flags;
+	bool isAsyncVideo = false;
+	bool hasAudio = false;
+	bool hasVideo = false;
+
+	bool sourceSelected = idx != -1;
+
+	if (sourceSelected) {
+		sceneItem = ui->sources->Get(idx);
+		source = obs_sceneitem_get_source(sceneItem);
+		flags = obs_source_get_output_flags(source);
+		isAsyncVideo = (flags & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO;
+		hasAudio = (flags & OBS_SOURCE_AUDIO) == OBS_SOURCE_AUDIO;
+		hasVideo = (flags & OBS_SOURCE_VIDEO) == OBS_SOURCE_VIDEO;
+	}
+
+	// Add new source
+	QPointer<QMenu> addSourceMenu = CreateAddSourcePopupMenu();
+	if (addSourceMenu) {
+		popup.addMenu(addSourceMenu);
+		popup.addSeparator();
+	}
+
+	// Display Preview-specific menu entries
 	if (preview) {
 		QAction *action =
 			popup.addAction(QTStr("Basic.Main.PreviewConextMenu.Enable"), this, &OBSBasic::TogglePreview);
@@ -5588,90 +5617,79 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 		popup.addAction(ui->actionLockPreview);
 		popup.addMenu(ui->scalingMenu);
 
-		previewProjectorSource = new QMenu(QTStr("PreviewProjector"));
+		popup.addSeparator();
+	}
+
+	// Projector entries
+	if (preview) {
+		previewProjectorSource = new QMenu(QTStr("Projector.Open.Preview"));
 		AddProjectorMenuMonitors(previewProjectorSource, this, &OBSBasic::OpenPreviewProjector);
+		previewProjectorSource->addSeparator();
+		previewProjectorSource->addAction(QTStr("Projector.Window"), this,
+									   &OBSBasic::OpenPreviewWindow);
 
 		popup.addMenu(previewProjectorSource);
+	}
 
-		QAction *previewWindow = popup.addAction(QTStr("PreviewWindow"), this, &OBSBasic::OpenPreviewWindow);
+	if (hasVideo) {
+		sourceProjector = new QMenu(QTStr("Projector.Open.Source"));
+		AddProjectorMenuMonitors(sourceProjector, this, &OBSBasic::OpenSourceProjector);
+		sourceProjector->addSeparator();
+		sourceProjector->addAction(QTStr("Projector.Window"), this, &OBSBasic::OpenSourceWindow);
 
-		popup.addAction(previewWindow);
+		popup.addMenu(sourceProjector);
+	}
 
+	popup.addSeparator();
+
+	// Screenshot entries
+	if (preview) {
 		popup.addAction(QTStr("Screenshot.Preview"), this, &OBSBasic::ScreenshotScene);
-
-		popup.addSeparator();
 	}
 
-	QPointer<QMenu> addSourceMenu = CreateAddSourcePopupMenu();
-	if (addSourceMenu)
-		popup.addMenu(addSourceMenu);
-
-	if (ui->sources->MultipleBaseSelected()) {
-		popup.addSeparator();
-		popup.addAction(QTStr("Basic.Main.GroupItems"), ui->sources, &SourceTree::GroupSelectedItems);
-
-	} else if (ui->sources->GroupsSelected()) {
-		popup.addSeparator();
-		popup.addAction(QTStr("Basic.Main.Ungroup"), ui->sources, &SourceTree::UngroupSelectedGroups);
+	if (hasVideo) {
+		popup.addAction(QTStr("Screenshot.Source"), this, &OBSBasic::ScreenshotSelectedSource);
 	}
 
 	popup.addSeparator();
-	popup.addAction(ui->actionCopySource);
-	popup.addAction(ui->actionPasteRef);
-	popup.addAction(ui->actionPasteDup);
-	popup.addSeparator();
 
-	popup.addSeparator();
-	popup.addAction(ui->actionCopyFilters);
-	popup.addAction(ui->actionPasteFilters);
-	popup.addSeparator();
-
-	if (idx != -1) {
-		if (addSourceMenu)
-			popup.addSeparator();
-
-		OBSSceneItem sceneItem = ui->sources->Get(idx);
-		obs_source_t *source = obs_sceneitem_get_source(sceneItem);
-		uint32_t flags = obs_source_get_output_flags(source);
-		bool isAsyncVideo = (flags & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO;
-		bool hasAudio = (flags & OBS_SOURCE_AUDIO) == OBS_SOURCE_AUDIO;
-		bool hasVideo = (flags & OBS_SOURCE_VIDEO) == OBS_SOURCE_VIDEO;
-
-		colorMenu = new QMenu(QTStr("ChangeBG"));
-		colorWidgetAction = new QWidgetAction(colorMenu);
-		colorSelect = new ColorSelect(colorMenu);
-		popup.addMenu(AddBackgroundColorMenu(colorMenu, colorWidgetAction, colorSelect, sceneItem));
-		popup.addAction(renameSource);
-		popup.addAction(ui->actionRemoveSource);
+	if (preview || sourceSelected) {
+		popup.addAction(ui->actionPasteRef);
+		popup.addAction(ui->actionPasteDup);
 		popup.addSeparator();
+	}
 
+	if (sourceSelected) {
 		popup.addMenu(ui->orderMenu);
 
-		if (hasVideo)
+		if (hasVideo) {
 			popup.addMenu(ui->transformMenu);
+		}
+
+		if (!preview) {
+			popup.addSeparator();
+			colorMenu = new QMenu(QTStr("ChangeBG"));
+			colorWidgetAction = new QWidgetAction(colorMenu);
+			colorSelect = new ColorSelect(colorMenu);
+			popup.addMenu(AddBackgroundColorMenu(colorMenu, colorWidgetAction, colorSelect, sceneItem));
+
+			if (hasAudio) {
+				QAction *actionHideMixer =
+					popup.addAction(QTStr("HideMixer"), this, &OBSBasic::ToggleHideMixer);
+				actionHideMixer->setCheckable(true);
+				actionHideMixer->setChecked(SourceMixerHidden(source));
+			}
+		}
 
 		popup.addSeparator();
 
-		if (hasAudio) {
-			QAction *actionHideMixer =
-				popup.addAction(QTStr("HideMixer"), this, &OBSBasic::ToggleHideMixer);
-			actionHideMixer->setCheckable(true);
-			actionHideMixer->setChecked(SourceMixerHidden(source));
+		if (hasVideo) {
+			popup.addAction(ui->actionCopyFilters);
+			popup.addAction(ui->actionPasteFilters);
 			popup.addSeparator();
 		}
 
-		if (hasVideo) {
-			QAction *resizeOutput = popup.addAction(QTStr("ResizeOutputSizeOfSource"), this,
-								&OBSBasic::ResizeOutputSizeOfSource);
-
-			int width = obs_source_get_width(source);
-			int height = obs_source_get_height(source);
-
-			resizeOutput->setEnabled(!obs_video_active());
-
-			if (width < 32 || height < 32)
-				resizeOutput->setEnabled(false);
-
+		if (hasVideo && source) {
 			scaleFilteringMenu = new QMenu(QTStr("ScaleFiltering"));
 			popup.addMenu(AddScaleFilteringMenu(scaleFilteringMenu, sceneItem));
 			blendingModeMenu = new QMenu(QTStr("BlendingMode"));
@@ -5683,23 +5701,44 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 				popup.addMenu(AddDeinterlacingMenu(deinterlaceMenu, source));
 			}
 
-			popup.addSeparator();
-
 			popup.addMenu(CreateVisibilityTransitionMenu(true));
 			popup.addMenu(CreateVisibilityTransitionMenu(false));
+
 			popup.addSeparator();
 
-			sourceProjector = new QMenu(QTStr("SourceProjector"));
-			AddProjectorMenuMonitors(sourceProjector, this, &OBSBasic::OpenSourceProjector);
-			popup.addMenu(sourceProjector);
-			popup.addAction(QTStr("SourceWindow"), this, &OBSBasic::OpenSourceWindow);
+			QAction *resizeOutput = popup.addAction(QTStr("ResizeOutputSizeOfSource"), this,
+								&OBSBasic::ResizeOutputSizeOfSource);
 
-			popup.addAction(QTStr("Screenshot.Source"), this, &OBSBasic::ScreenshotSelectedSource);
+			int width = obs_source_get_width(source);
+			int height = obs_source_get_height(source);
+
+			resizeOutput->setEnabled(!obs_video_active());
+
+			if (width < 32 || height < 32)
+				resizeOutput->setEnabled(false);
 		}
 
 		popup.addSeparator();
 
-		if (flags & OBS_SOURCE_INTERACTION)
+		// Source grouping
+		if (ui->sources->MultipleBaseSelected()) {
+			popup.addSeparator();
+			popup.addAction(QTStr("Basic.Main.GroupItems"), ui->sources, &SourceTree::GroupSelectedItems);
+
+		} else if (ui->sources->GroupsSelected()) {
+			popup.addSeparator();
+			popup.addAction(QTStr("Basic.Main.Ungroup"), ui->sources, &SourceTree::UngroupSelectedGroups);
+		}
+		popup.addAction(renameSource);
+		popup.addAction(ui->actionRemoveSource);
+		popup.addSeparator();
+
+		popup.addAction(ui->actionCopySource);
+		popup.addAction(ui->actionPasteRef);
+		popup.addAction(ui->actionPasteDup);
+		popup.addSeparator();
+
+		if (flags && flags & OBS_SOURCE_INTERACTION)
 			popup.addAction(QTStr("Interact"), this, &OBSBasic::on_actionInteract_triggered);
 
 		popup.addAction(QTStr("Filters"), this, [&]() { OpenFilters(); });
@@ -5768,7 +5807,7 @@ QMenu *OBSBasic::CreateAddSourcePopupMenu()
 	bool foundDeprecated = false;
 	size_t idx = 0;
 
-	QMenu *popup = new QMenu(QTStr("Add"), this);
+	QMenu *popup = new QMenu(QTStr("AddSource"), this);
 	QMenu *deprecated = new QMenu(QTStr("Deprecated"), popup);
 
 	auto getActionAfter = [](QMenu *menu, const QString &name) {
@@ -7654,11 +7693,13 @@ void OBSBasic::ProgramViewContextMenuRequested()
 	QMenu popup(this);
 	QPointer<QMenu> studioProgramProjector;
 
-	studioProgramProjector = new QMenu(QTStr("StudioProgramProjector"));
+	studioProgramProjector = new QMenu(QTStr("Projector.Open.Program"));
 	AddProjectorMenuMonitors(studioProgramProjector, this, &OBSBasic::OpenStudioProgramProjector);
+	studioProgramProjector->addSeparator();
+	studioProgramProjector->addAction(QTStr("Projector.Window"), this, &OBSBasic::OpenStudioProgramWindow);
 
 	popup.addMenu(studioProgramProjector);
-	popup.addAction(QTStr("StudioProgramWindow"), this, &OBSBasic::OpenStudioProgramWindow);
+	popup.addSeparator();
 	popup.addAction(QTStr("Screenshot.StudioProgram"), this, &OBSBasic::ScreenshotProgram);
 
 	popup.exec(QCursor::pos());
@@ -7673,13 +7714,12 @@ void OBSBasic::on_previewDisabledWidget_customContextMenuRequested()
 	action->setCheckable(true);
 	action->setChecked(obs_display_enabled(ui->preview->GetDisplay()));
 
-	previewProjectorMain = new QMenu(QTStr("PreviewProjector"));
+	previewProjectorMain = new QMenu(QTStr("Projector.Open.Preview"));
 	AddProjectorMenuMonitors(previewProjectorMain, this, &OBSBasic::OpenPreviewProjector);
-
-	QAction *previewWindow = popup.addAction(QTStr("PreviewWindow"), this, &OBSBasic::OpenPreviewWindow);
+	previewProjectorMain->addSeparator();
+	previewProjectorMain->addAction(QTStr("Projector.Window"), this, &OBSBasic::OpenPreviewWindow);
 
 	popup.addMenu(previewProjectorMain);
-	popup.addAction(previewWindow);
 	popup.exec(QCursor::pos());
 }
 
@@ -8575,6 +8615,11 @@ void OBSBasic::OpenSourceWindow()
 	OpenProjector(obs_sceneitem_get_source(item), -1, ProjectorType::Source);
 }
 
+void OBSBasic::OpenMultiviewWindow()
+{
+	OpenProjector(nullptr, -1, ProjectorType::Multiview);
+}
+
 void OBSBasic::OpenSceneWindow()
 {
 	OBSScene scene = GetCurrentScene();
@@ -8831,11 +8876,6 @@ void OBSBasic::on_resetUI_triggered()
 	config_set_bool(App()->GetUserConfig(), "BasicWindow", "gridMode", false);
 }
 
-void OBSBasic::on_multiviewProjectorWindowed_triggered()
-{
-	OpenProjector(nullptr, -1, ProjectorType::Multiview);
-}
-
 void OBSBasic::on_toggleListboxToolbars_toggled(bool visible)
 {
 	ui->sourcesToolbar->setVisible(visible);
@@ -9035,8 +9075,8 @@ void OBSBasic::SystemTrayInit()
 	exit = new QAction(QTStr("Exit"), trayIcon.data());
 
 	trayMenu = new QMenu;
-	previewProjector = new QMenu(QTStr("PreviewProjector"));
-	studioProgramProjector = new QMenu(QTStr("StudioProgramProjector"));
+	previewProjector = new QMenu(QTStr("Projector.Open.Preview"));
+	studioProgramProjector = new QMenu(QTStr("Projector.Open.Program"));
 	AddProjectorMenuMonitors(previewProjector, this, &OBSBasic::OpenPreviewProjector);
 	AddProjectorMenuMonitors(studioProgramProjector, this, &OBSBasic::OpenStudioProgramProjector);
 	trayMenu->addAction(showHide);
